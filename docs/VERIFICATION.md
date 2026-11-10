@@ -21,3 +21,7 @@ This development environment has a CPU and no Docker engine. Run the diagnostics
 ## Parquet loader regression fix
 
 The original HF Dataset Scanner reproduced `ArrowNotImplementedError` on the first TD1 `dataset_adapters/code.parquet` shard, even with its output batch size reduced to 16. Direct `ParquetFile.iter_batches(batch_size=16, use_threads=False)` successfully read the first two batches (32 real trajectories) from that same pinned shard. Source preparation now uses that direct reader for both supported corpora. Two added tests exercise actual nested Parquet, deterministic source paths/revisions, and unchanged holdout membership when the requested training sample grows. The default CPU suite passes 19 tests; three optional model/tokenizer tests are skipped without their local fixtures.
+
+## Transformers Trainer argument regression fix
+
+Transformers 5.20.2 no longer accepts `warmup_ratio`; the recipe now uses fractional `warmup_steps=0.05`, retaining 5% warmup. All production TrainingArguments are assembled in one shared factory and validated before corpus preparation. API-contract tests bind every preset/method combination to the pinned Transformers constructor, including in a torch-disabled environment. Native LFM3 CPU training tests now use that same complete factory (overriding only CPU/precision), exercise evaluation and checkpoint reload/resume for both LoRA and full training. Result: 27 passed, one optional tokenizer test skipped because its local tokenizer fixture was absent.

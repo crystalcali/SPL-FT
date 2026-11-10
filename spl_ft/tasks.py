@@ -51,11 +51,14 @@ def doctor():
 def train(c, folder):
     import torch
     import psutil
-    from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, TrainerCallback, set_seed
+    from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainerCallback, set_seed
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA unavailable. Run Diagnostics and install CUDA PyTorch via scripts/setup.sh")
     if psutil.virtual_memory().available < (30 if c.method == "full" else 12) * 2**30:
         raise RuntimeError("Not enough available memory. Stop other large model servers before training.")
+    # Validate the complete pinned Trainer configuration before expensive data I/O.
+    from .training import build_training_arguments
+    arguments = build_training_arguments(c, folder)
     set_seed(c.training_seed)
     data_path = prepare(c, home())
     manifest = json.loads((data_path / "manifest.json").read_text())
@@ -91,15 +94,6 @@ def train(c, folder):
             with open(folder / "metrics.jsonl", "a") as f:
                 f.write(json.dumps(event, default=str) + "\n")
 
-    arguments = TrainingArguments(output_dir=str(folder / "checkpoints"), num_train_epochs=c.epochs,
-        max_steps=c.max_steps, per_device_train_batch_size=c.micro_batch, per_device_eval_batch_size=1,
-        gradient_accumulation_steps=c.accumulation, learning_rate=c.learning_rate, lr_scheduler_type="cosine",
-        warmup_ratio=0.05, weight_decay=0.01, bf16=True, gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={"use_reentrant": False}, logging_steps=1,
-        eval_strategy="steps", eval_steps=c.save_steps, save_strategy="steps", save_steps=c.save_steps,
-        save_total_limit=2, seed=c.training_seed, data_seed=c.training_seed, report_to="none",
-        remove_unused_columns=False, dataloader_num_workers=0, prediction_loss_only=True,
-        include_num_input_tokens_seen=True, optim="adamw_torch")
     # Native generation masks were applied above; Trainer preserves our labels.
     # Rebuilding text inside an SFT trainer could mask tool observations incorrectly.
     trainer = Trainer(model=model, args=arguments, train_dataset=data["train"], eval_dataset=data["validation"],

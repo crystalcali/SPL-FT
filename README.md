@@ -49,7 +49,7 @@ Jobs run sequentially, including managed model serving and evaluation. The worke
 
 Each starts from **`LiquidAI/LFM3-1.7B`**, the post-trained checkpoint, not its Base version. All recipes support full weight training. BF16, micro batch 1, gradient accumulation 16 and gradient checkpointing are defaults. Context lengths and batch sizes are starting configurations, not measured Spark capacity guarantees. An out-of-memory failure remains visible and can be retried with smaller settings; the app never silently changes your experiment.
 
-Training uses Transformers Trainer with precomputed assistant-only labels and PEFT for LoRA. The module list follows Liquid's SFT cookbook. Using explicit labels preserves the model's native generation mask for multi-turn trajectories; no loss is applied to user messages or terminal observations. The pinned model revision includes remote modeling code and tokenizer/template. Research recipes use the native BF16 model, not a quantized inference checkpoint.
+Training uses Transformers Trainer with precomputed assistant-only labels and PEFT for LoRA. The complete Trainer configuration is validated before dataset preparation; the pinned Transformers 5.20 recipe uses `warmup_steps=0.05` for 5% warmup. The module list follows Liquid's SFT cookbook. Using explicit labels preserves the model's native generation mask for multi-turn trajectories; no loss is applied to user messages or terminal observations. The pinned model revision includes remote modeling code and tokenizer/template. Research recipes use the native BF16 model, not a quantized inference checkpoint.
 
 ## Reproducible sampling
 

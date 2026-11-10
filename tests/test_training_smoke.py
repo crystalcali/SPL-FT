@@ -6,7 +6,7 @@ import pytest
 @pytest.mark.parametrize('method',['full','lora'])
 def test_native_architecture_trainer_checkpoint_and_reload(tmp_path,method):
     import torch
-    from transformers import AutoConfig,AutoModelForCausalLM,Trainer,TrainingArguments
+    from transformers import AutoConfig,AutoModelForCausalLM,Trainer
     from peft import get_peft_model,LoraConfig
     c=AutoConfig.from_pretrained(os.environ['SPL_FT_MODEL_CODE_PATH'],trust_remote_code=True)
     c.hidden_size=32;c.intermediate_size=64;c.head_dim=8;c.num_hidden_layers=3
@@ -19,17 +19,18 @@ def test_native_architecture_trainer_checkpoint_and_reload(tmp_path,method):
         m.enable_input_require_grads()
     x=torch.randint(3,256,(4,32));labels=x.clone();labels[:,:10]=-100
     data=[{'input_ids':a,'labels':b} for a,b in zip(x,labels)]
-    args=TrainingArguments(output_dir=str(tmp_path),max_steps=2,use_cpu=True,per_device_train_batch_size=1,
-        gradient_checkpointing=True,gradient_checkpointing_kwargs={'use_reentrant':False},
-        report_to='none',save_steps=1,save_total_limit=2,logging_steps=1,remove_unused_columns=False,
-        prediction_loss_only=True,include_num_input_tokens_seen=True,optim='adamw_torch')
-    trainer=Trainer(model=m,args=args,train_dataset=data)
+    from spl_ft.config import Experiment
+    from spl_ft.training import build_training_arguments
+    experiment=Experiment(method=method,max_steps=2,micro_batch=1,accumulation=1,save_steps=1)
+    args=build_training_arguments(experiment,tmp_path,use_cpu=True,bf16=False)
+    assert args.get_warmup_steps(100)==5
+    trainer=Trainer(model=m,args=args,train_dataset=data,eval_dataset=data)
     result=trainer.train()
     assert result.global_step==2
-    assert (tmp_path/'checkpoint-2'/'trainer_state.json').exists()
-    assert (tmp_path/'checkpoint-2'/'optimizer.pt').exists()
+    assert (tmp_path/'checkpoints'/'checkpoint-2'/'trainer_state.json').exists()
+    assert (tmp_path/'checkpoints'/'checkpoint-2'/'optimizer.pt').exists()
     assert torch.isfinite(torch.tensor(result.training_loss))
-    checkpoint=tmp_path/'checkpoint-2'
+    checkpoint=tmp_path/'checkpoints'/'checkpoint-2'
     if method=='lora':
         assert (checkpoint/'adapter_config.json').exists()
         from peft import PeftModel
