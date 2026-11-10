@@ -47,6 +47,21 @@ def test_retry_resume_requires_checkpoint(tmp_path):
     assert r.status_code==200 and r.json()['id']!=j['id']
 
 
+def test_hundred_epochs_survive_queue_and_reach_trainer(tmp_path):
+    from spl_ft.config import Experiment
+    from spl_ft.training import training_argument_kwargs
+    c = client(tmp_path)
+    response = c.post('/api/experiments', json={'epochs': 100, 'max_steps': -1, 'save_steps': 100})
+    assert response.status_code == 200
+    job = c.get('/api/jobs/' + response.json()['id']).json()
+    experiment = Experiment.model_validate(job['config'])
+    arguments = training_argument_kwargs(experiment, tmp_path)
+    assert arguments['num_train_epochs'] == 100
+    assert arguments['max_steps'] == -1
+    assert arguments['save_steps'] == 100
+    assert c.post('/api/experiments', json={'epochs': 101}).status_code == 422
+
+
 def test_skill_validation_and_dependency(tmp_path):
     c=client(tmp_path)
     assert c.post('/api/benchmarks',json={'skill_ids':['../etc']}).status_code==400

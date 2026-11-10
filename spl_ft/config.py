@@ -30,7 +30,7 @@ class Experiment(BaseModel):
     sample_seed: int = 123
     training_seed: int = 42
     max_length: int = Field(default=4096, ge=512, le=131072)
-    epochs: float = Field(default=1, gt=0, le=50)
+    epochs: float = Field(default=1, gt=0, le=100)
     max_steps: int = Field(default=-1, ge=-1, le=1000000)
     learning_rate: float = Field(default=0.0001, gt=0, le=0.01)
     micro_batch: int = Field(default=1, ge=1, le=32)
