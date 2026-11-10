@@ -53,7 +53,7 @@ def skill_snapshot(root, skill_ids, output):
     return paths, manifest
 
 
-def harbor_config(c, folder, tasks, endpoint, skill_paths):
+def harbor_config(c, folder, tasks, endpoint, skill_paths, agent_version=None):
     agent = {"name": c.agent, "model_name": "openai/lfm3", "base_url": endpoint,
              "model_api_key_name": "SPL_INFER_KEY", "model_api_format": "openai_chat_completions", "skills": skill_paths}
     if c.agent == "opencode":
@@ -64,6 +64,8 @@ def harbor_config(c, folder, tasks, endpoint, skill_paths):
         agent["kwargs"] = {"max_turns": c.max_turns, "temperature": c.temperature,
             "model_info": {"max_input_tokens": c.context_length - c.max_new_tokens, "max_output_tokens": c.max_new_tokens},
             "llm_call_kwargs": {"max_tokens": c.max_new_tokens}, "interleaved_thinking": True}
+    if c.agent == "opencode" and agent_version:
+        agent["kwargs"]["version"] = agent_version
     overlay = folder / "network.json"
     service = {"extra_hosts": ["host.docker.internal:host-gateway"]}
     if c.architecture == "amd64":
@@ -123,14 +125,26 @@ def run_benchmark(c: Benchmark, folder: Path):
         env["DOCKER_DEFAULT_PLATFORM"] = "linux/amd64"
         os.environ["DOCKER_DEFAULT_PLATFORM"] = "linux/amd64"
     os.environ["SPL_INFER_KEY"] = key
-    config = harbor_config(c, folder, tasks, f"http://{'host.docker.internal' if c.agent == 'opencode' else '127.0.0.1'}:{port}/v1", paths)
+    import importlib.metadata
+    import re
+    harbor_version = importlib.metadata.version("harbor")
+    agent_version = "2.0.0"  # Terminus bundled with the pinned Harbor release.
+    if c.agent == "opencode":
+        # Resolve once and pin every container in this run to the same CLI.
+        response = httpx.get("https://registry.npmjs.org/opencode-ai/latest", timeout=30)
+        response.raise_for_status()
+        agent_version = response.json()["version"]
+        if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?", agent_version):
+            raise ValueError("Unexpected OpenCode package version")
+    config = harbor_config(c, folder, tasks, f"http://{'host.docker.internal' if c.agent == 'opencode' else '127.0.0.1'}:{port}/v1", paths, agent_version)
     # Terminus runs on the host; OpenCode runs inside the task container.
     # The compose overlay supplies host.docker.internal on native Linux.
     (folder / "harbor-config.json").write_text(json.dumps(config, indent=2))
     provenance = {"benchmark_repo": BENCH_REPO, "benchmark_revision": revision, "model_revision": model_revision,
-                  "skills": skills, "tasks": config["tasks"], "expected": len(tasks) * c.attempts,
+                  "skills": skills, "agent_version": agent_version, "harbor_version": harbor_version,
+                  "tasks": config["tasks"], "expected": len(tasks) * c.attempts,
                   "comparison_key": digest({"revision": revision, "tasks": config["tasks"], "skills": skills,
-                     "agent": c.agent, "temperature": c.temperature, "context": c.context_length,
+                     "agent": c.agent, "agent_version": agent_version, "harbor_version": harbor_version, "temperature": c.temperature, "context": c.context_length,
                      "output": c.max_new_tokens, "architecture": c.architecture, "attempts": c.attempts,
                      "max_turns": c.max_turns, "seed": c.seed})}
     (folder / "benchmark-manifest.json").write_text(json.dumps(provenance, indent=2))

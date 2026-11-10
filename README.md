@@ -79,7 +79,7 @@ Harbor **0.25.0** resolves the official Hugging Face task snapshot. The runner p
 .venv/bin/hf auth login
 ```
 
-The default agent is **Terminus 2**: real TD1 trajectories use its JSON command format, so it is the most direct training/evaluation match. **OpenCode** is an optional second harness, useful when comparing with Liquid's published model-card setup. It is installed by Harbor inside each task environment and needs working package-network access there. The turn limit applies to Terminus; OpenCode follows each task's timeout.
+The default agent is **Terminus 2**: real TD1 trajectories use its JSON command format, so it is the most direct training/evaluation match. **OpenCode** is an optional second harness, useful when comparing with Liquid's published model-card setup. Its package version is resolved once per evaluation and pinned across that run; it is installed by Harbor inside each task environment and needs working package-network access there. The turn limit applies to Terminus; OpenCode follows each task's timeout.
 
 The runner starts an authenticated, temporary OpenAI-compatible Transformers endpoint, loads the Original/full model or merges a LoRA adapter in memory, then stops the endpoint after evaluation. Generation is serialized for predictable memory use. It supports native LFM3 reasoning and XML tool calls, and buffered SSE responses for clients that request streaming. It is a compatibility implementation, not a high-throughput vLLM replacement.
 
@@ -87,7 +87,7 @@ Terminus reaches inference on host loopback; OpenCode reaches it through `host.d
 
 **ARM64 note:** On Spark the default benchmark architecture is AMD64 emulation to preserve x86 task images. This costs CPU performance and may affect timed tasks. Such results record their architecture and are grouped separately from native results. Registering QEMU cannot guarantee every benchmark's nested virtualization, networking or binary requirement works. Infrastructure failures are surfaced, not hidden or counted as solved tasks. Native ARM is available as an advanced option; portability of all tasks is not assumed.
 
-The browser offers all 89 tasks, a first-3-task smoke run, first 10 tasks, name filters and multiple attempts. These subsets are labelled as partial evaluations; they are not full benchmark scores. A complete leaderboard entry requires all scheduled attempts to have valid grades. The primary displayed success rate is solved / scheduled attempts; infrastructure errors cannot increase it by reducing the denominator. Exact comparison groups include benchmark tasks, architecture, agent, skills, context, sampling, seed, output limits and attempts. `graded_success_rate` is diagnostic only. This workbench's leaderboard is local; it does not publish submissions.
+The browser offers all 89 tasks, a first-3-task smoke run, first 10 tasks, name filters and multiple attempts. These subsets are labelled as partial evaluations; they are not full benchmark scores. A complete leaderboard entry requires all scheduled attempts to have valid grades. The primary displayed success rate is solved / scheduled attempts; infrastructure errors cannot increase it by reducing the denominator. Exact comparison groups include benchmark tasks, architecture, agent and its version, Harbor version, skills, context, sampling, seed, output limits and attempts. `graded_success_rate` is diagnostic only. This workbench's leaderboard is local; it does not publish submissions.
 
 ## Skills
 

@@ -20,9 +20,10 @@ def test_false_reward_valid_cannot_count_as_pass():
 
 
 def test_harbor_agent_and_network_config(tmp_path):
-    c=harbor_config(Benchmark(agent='opencode',architecture='amd64'),tmp_path,[{'path':'/tmp/task'}],'http://host.docker.internal:123/v1',[])
+    c=harbor_config(Benchmark(agent='opencode',architecture='amd64'),tmp_path,[{'path':'/tmp/task'}],'http://host.docker.internal:123/v1',[],agent_version='1.2.3')
     assert c['agents'][0]['base_url'].startswith('http://host.docker.internal')
     assert 'opencode_config' in c['agents'][0]['kwargs']
+    assert c['agents'][0]['kwargs']['version']=='1.2.3'
     assert c['environment']['extra_docker_compose']
     assert 'linux/amd64' in (tmp_path/'network.json').read_text()
 
