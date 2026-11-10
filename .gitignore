@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.spl-ft/
+.env
+*.log
+node_modules/
+.spl-ft-*/
+.bootstrap/
+
+build/
+dist/
