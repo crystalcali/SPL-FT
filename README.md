@@ -63,6 +63,8 @@ The first preparation streams **all selected source subsets** to obtain an unbia
 - Manifests save source revision, subset selection, selected IDs and task groups. A source revision and split parameters must stay identical when comparing experiments. Pin `dataset_revision` when creating a series over several days.
 - `scan_limit` is an optional fast pilot over the first N source records. It is explicitly marked **prefix_sample**, not described as a globally random sample. Holdout stability requires the same scan limit too.
 
+Source Parquet files are read directly with `ParquetFile.iter_batches(batch_size=16, use_threads=False)`, bypassing the Hugging Face Dataset Scanner path that fails on very large nested conversation columns. Reducing the scanner batch size alone is insufficient on TD1. Rows are read in deterministic shard order from the pinned HF revision; the reader does not skip failing files or change the split seeds.
+
 Exact prompt normalization catches exact/format duplicates, not arbitrary paraphrases or semantic overlap. Terminal-Bench tasks and solutions are never used as a training source. Cross-corpus semantic decontamination against the benchmark is not claimed.
 
 ## Long histories and loss

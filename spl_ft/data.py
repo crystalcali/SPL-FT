@@ -4,7 +4,9 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from .config import Experiment, MODEL, home
+from .config import Experiment, MODEL, home, TD1, TD2
+from fnmatch import fnmatch
+from itertools import islice
 
 
 def digest(value):
@@ -101,9 +103,46 @@ class Pools:
         return selected
 
 
+# Keep the official HF subset file patterns, but bypass datasets' Arrow scanner.
+PARQUET_PATTERNS = {
+    TD1: {
+        "dataset_adapters": "dataset_adapters/*.parquet",
+        "skill_based_easy": "synthetic_tasks/skill_based/easy/*/data_filtered.parquet",
+        "skill_based_medium": "synthetic_tasks/skill_based/medium/*/data_filtered.parquet",
+        "skill_based_mixed": "synthetic_tasks/skill_based/mixed/*/data_filtered.parquet",
+    },
+    TD2: {"default": "data/train-*.parquet"},
+}
+
+
+def parquet_rows(source):
+    """Decode nested columns through RecordBatchReader, not Dataset Scanner.
+
+    The scanner can overflow nested child buffers even with a small output
+    batch_size. ParquetFile.iter_batches takes a different Arrow code path.
+    Never materialize the whole table/row group or silently skip a bad shard.
+    """
+    import pyarrow.parquet as pq
+    with pq.ParquetFile(source) as parquet:
+        for batch in parquet.iter_batches(batch_size=16, use_threads=False):
+            yield from batch.to_pylist()
+
+
+def source_rows(dataset, subset, revision, repo_files, emit=print):
+    from huggingface_hub import HfFileSystem
+    pattern = PARQUET_PATTERNS[dataset][subset]
+    paths = sorted(path for path in repo_files if fnmatch(path, pattern))
+    if not paths:
+        raise ValueError(f"No Parquet shards matched {dataset}/{subset}: {pattern}")
+    fs = HfFileSystem()
+    for path in paths:
+        emit(f"Reading {dataset}/{path}: direct ParquetFile batches of 16")
+        with fs.open(f"datasets/{dataset}@{revision}/{path}", "rb") as stream:
+            yield from parquet_rows(stream)
+
+
 def prepare(config: Experiment, root: Path, emit=print):
     from huggingface_hub import HfApi
-    from datasets import load_dataset
     revision = config.dataset_revision or HfApi().dataset_info(config.dataset).sha
     identity = {"dataset": config.dataset, "revision": revision, "configs": sorted(config.td1_configs) if config.preset != "reasoning" else ["default"],
                 "train_size": config.train_size, "val_size": config.val_size, "test_size": config.test_size,
@@ -117,11 +156,11 @@ def prepare(config: Experiment, root: Path, emit=print):
     dbpath.unlink(missing_ok=True)
     pools = Pools(dbpath, config)
     scanned = invalid = 0
+    repo_files = HfApi().list_repo_files(config.dataset, repo_type="dataset", revision=revision)
     for subset in identity["configs"]:
-        ds = load_dataset(config.dataset, subset, split="train", revision=revision, streaming=True)
-        for raw in ds:
-            if config.scan_limit is not None and scanned >= config.scan_limit:
-                break
+        ds = source_rows(config.dataset, subset, revision, repo_files, emit)
+        remaining = None if config.scan_limit is None else config.scan_limit - scanned
+        for raw in islice(ds, remaining):
             scanned += 1
             try:
                 row = normalize(raw)
@@ -131,6 +170,7 @@ def prepare(config: Experiment, root: Path, emit=print):
             if scanned % 1000 == 0:
                 pools.db.commit()
                 emit(f"Scanned {scanned:,}; rejected {invalid:,}; subset {subset}")
+        ds.close()
         if config.scan_limit is not None and scanned >= config.scan_limit:
             break
     selected = pools.finish()

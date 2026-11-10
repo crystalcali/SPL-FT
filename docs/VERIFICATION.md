@@ -17,3 +17,7 @@
 - A complete Terminal-Bench score or any measured improvement after training.
 
 This development environment has a CPU and no Docker engine. Run the diagnostics, a short GPU training job, and a three-task benchmark on Spark before scheduling long experiments. There are no invented training metrics or benchmark scores in the application.
+
+## Parquet loader regression fix
+
+The original HF Dataset Scanner reproduced `ArrowNotImplementedError` on the first TD1 `dataset_adapters/code.parquet` shard, even with its output batch size reduced to 16. Direct `ParquetFile.iter_batches(batch_size=16, use_threads=False)` successfully read the first two batches (32 real trajectories) from that same pinned shard. Source preparation now uses that direct reader for both supported corpora. Two added tests exercise actual nested Parquet, deterministic source paths/revisions, and unchanged holdout membership when the requested training sample grows. The default CPU suite passes 19 tests; three optional model/tokenizer tests are skipped without their local fixtures.
